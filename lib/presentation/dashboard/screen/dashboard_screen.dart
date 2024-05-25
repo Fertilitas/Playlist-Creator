@@ -1,19 +1,18 @@
+import 'dart:io';
 import 'dart:ui';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:playlist_creator/presentation/dashboard/riverpod/dashboard.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final listMusicP = ref.watch(listMusicProvider);
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  final List<int> _items = List<int>.generate(50, (int index) => index);
-
-  @override
-  Widget build(BuildContext context) {
     Widget proxyDecorator(
         Widget child, int index, Animation<double> animation) {
       return AnimatedBuilder(
@@ -25,7 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Transform.scale(
             scale: scale,
             child: OrderableCard(
-              data: 'Lagu ${_items[index]}',
+              index: index,
               elevation: elevation,
             ),
           );
@@ -41,7 +40,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           children: [
             ElevatedButton(
-              onPressed: () {},
+              onPressed: () async {
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  allowMultiple: true,
+                  type: FileType.custom,
+                  allowedExtensions: [
+                    'mp3',
+                    'wav',
+                    'aac',
+                  ],
+                );
+
+                if (result != null) {
+                  List<File> files =
+                      result.paths.map((path) => File(path!)).toList();
+                  ref.read(listMusicProvider.notifier).state =
+                      listMusicP + files;
+                } else {
+                  // User canceled the picker
+                }
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey.shade300,
                 shape: RoundedRectangleBorder(
@@ -61,24 +79,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: ReorderableListView.builder(
                   shrinkWrap: true,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  proxyDecorator: proxyDecorator,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  proxyDecorator: (child, index, animation) => proxyDecorator(
+                    child,
+                    index,
+                    animation,
+                  ),
                   onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      if (oldIndex < newIndex) {
-                        newIndex -= 1;
-                      }
-                      final int item = _items.removeAt(oldIndex);
-                      _items.insert(newIndex, item);
-                    });
-                    print(_items);
+                    if (oldIndex < newIndex) {
+                      newIndex -= 1;
+                    }
+                    final File item = listMusicP.removeAt(oldIndex);
+                    listMusicP.insert(newIndex, item);
+                    ref.read(listMusicProvider.notifier).state = listMusicP;
+                    print(listMusicP);
                   },
-                  itemCount: _items.length,
+                  itemCount: listMusicP.length,
                   itemBuilder: (BuildContext context, int index) =>
                       OrderableCard(
                     key: Key("$index"),
-                    data: 'Lagu ${_items[index]}',
+                    index: index,
                   ),
                 ),
               ),
@@ -101,17 +124,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-class OrderableCard extends StatelessWidget {
+class OrderableCard extends ConsumerWidget {
   const OrderableCard({
     super.key,
-    required this.data,
+    required this.index,
     this.elevation,
   });
-  final String data;
+  final int index;
   final double? elevation;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final listMusicP = ref.watch(listMusicProvider);
     return Card(
       elevation: elevation,
       color: Colors.lime.shade100,
@@ -120,8 +144,28 @@ class OrderableCard extends StatelessWidget {
           horizontal: 20,
           vertical: 8,
         ),
-        child: Center(
-          child: Text(data),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                listMusicP[index].path.split('/').last,
+              ),
+            ),
+            SizedBox(
+              width: 8,
+            ),
+            GestureDetector(
+              onTap: () async {
+                listMusicP.removeAt(index);
+                ref.refresh(listMusicProvider.notifier).state = listMusicP;
+              },
+              child: Icon(
+                Icons.delete,
+                size: 20,
+                color: Colors.red.shade400,
+              ),
+            ),
+          ],
         ),
       ),
     );
